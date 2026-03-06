@@ -65,6 +65,12 @@ runs:
         OSS_CAD_SUITE_BIN_PATH=`pwd`/oss-cad-suite/bin
         echo "PATH=$PATH:$OSS_CAD_SUITE_BIN_PATH" >> $GITHUB_ENV
 
+    - name: Cache APT packages
+      uses: actions/cache@v4
+      with:
+        path: /var/cache/apt/archives
+        key: ${{ runner.os }}-apt-packages-${{ hashFiles('**/action.yml') }}
+
     - name: Install RISC-V toolchain
       shell: bash
       if: inputs.install-toolchain == 'true'
