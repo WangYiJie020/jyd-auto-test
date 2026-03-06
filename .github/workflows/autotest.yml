@@ -383,8 +383,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ${{ env.YSYX_HOME }}/ysyxSoC/build
+            /tmp/ysyxSoC/build
           key: ${{ runner.os }}-ysyxsoc-verilog-${{ needs.parse.outputs.STUID }}-${{ hashFiles('**/ysyx-workbench/patch/ysyxSoC/*') }}
+          run: |
+            if [[ -d /tmp/ysyxSoC/build ]]; then
+              echo "Cache hit for ysyxSoC verilog."
+              mkdir -p $YSYX_HOME/ysyxSoC/build
+              cp -r /tmp/ysyxSoC/build/ $YSYX_HOME/ysyxSoC/build/
+            else
+              echo "Cache miss for ysyxSoC verilog."
+            fi
 
       - name: Clone and patch ysyxSoC
         if: steps.soc-verilog-cache.outputs.cache-hit != 'true'
@@ -400,6 +408,8 @@ jobs:
           sed -i -e 's+git@github.com:+https://github.com/+' $YSYX_HOME/ysyxSoC/.gitmodules
           make -C $YSYX_HOME/ysyxSoC dev-init
           make -C $YSYX_HOME/ysyxSoC verilog
+          mkdir -p /tmp/ysyxSoC/build
+          cp -r $YSYX_HOME/ysyxSoC/build /tmp/ysyxSoC/build
 
       - name: Upload verilog file
         uses: actions/upload-artifact@v4
