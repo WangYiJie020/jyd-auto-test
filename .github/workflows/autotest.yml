@@ -534,6 +534,7 @@ jobs:
 
       - name: rt-thread init
         run: |
+          cd $YSYX_HOME
           git config --global user.email "ci@ysyx.org"
           git config --global user.name "ysyx-ci"
           git clone --depth 1 https://github.com/NJU-ProjectN/rt-thread-am
