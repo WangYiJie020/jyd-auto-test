@@ -43,7 +43,6 @@ runs:
           curl -L "https://github.com/com-lihaoyi/mill/releases/download/$MILL_VERSION/$MILL_VERSION" -o ~/.local/bin/mill
           chmod +x ~/.local/bin/mill
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-          mill --version
         fi
 
     - name: Set environment variables
