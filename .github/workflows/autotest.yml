@@ -149,8 +149,7 @@ jobs:
             ~/.local
             ~/.cache/mill
           key: ${{ runner.os }}-dir-${{ steps.set-cache.outputs.cache-key }}
-          restore-keys: |
-            ${{ runner.os }}-dir-
+          restore-keys: ${{ runner.os }}-dir-
 
       - name: Clone target repo
         if: steps.cache-dir.outputs.cache-hit != 'true'
