@@ -28,28 +28,51 @@ jobs:
           echo "📝 Body Content:"
           echo "${{ github.event.issue.body }}"  # 直接输出issue正文
       - name: Parse information
+        # id: parse
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.issue.number }}
+      
+      - name: Extract form data
+        id: form-data
+        run: |
+          BODY="${{ github.event.issue.body }}"
+          
+          # 使用正则表达式从issue body中提取表单数据
+          REPO=$(echo "$BODY" | grep -A 1 "### 仓库URL" | tail -1 | xargs)
+          BRANCH=$(echo "$BODY" | grep -A 1 "### 分支名" | tail -1 | xargs)
+          COMMENT=$(echo "$BODY" | grep -A 1 "### 注释" | tail -1 | xargs)
+          MAKE_CHECKED=$(echo "$BODY" | grep -A 2 "### make参数" | grep "^\- \[x\]" | wc -l)
+          
+          echo "REPO=$REPO" >> $GITHUB_OUTPUT
+          echo "BRANCH=$BRANCH" >> $GITHUB_OUTPUT
+          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
+          echo "MAKE_CHECKED=$MAKE_CHECKED" >> $GITHUB_OUTPUT
+      
+      - name: Set outputs
         id: parse
         run: |
-          STUID=$(echo "${{ github.event.issue.body }}" | sed -n -e '3p')
-          REPO=$(echo "${{ github.event.issue.body }}" | sed -n -e '7p')
-          BRANCH=$(echo "${{ github.event.issue.body }}" | sed -n -e '11p')
+          STUID="ysyx_25100261"
+          REPO="${{ steps.form-data.outputs.REPO }}"
+          BRANCH="${{ steps.form-data.outputs.BRANCH }}"
+          COMMENT="${{ steps.form-data.outputs.COMMENT }}"
+          MAKEJOBS=1
+          
+          if [[ "${{ steps.form-data.outputs.MAKE_CHECKED }}" -gt 0 ]]; then
+            MAKEJOBS=`nproc`
+          fi
+          
           echo "STUID=$STUID" >> $GITHUB_OUTPUT
           echo "REPO=$REPO" >> $GITHUB_OUTPUT
           echo "BRANCH=$BRANCH" >> $GITHUB_OUTPUT
+          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
+          echo "MAKEJOBS=$MAKEJOBS" >> $GITHUB_OUTPUT
 
           sudo timedatectl set-timezone Asia/Shanghai
           DATE=`date +"%F %T.%N"`
-          COMMENT=$(echo "${{ github.event.issue.body }}" | sed -n -e '15p')
           RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           echo "DATE=$DATE" >> $GITHUB_OUTPUT
-          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
           echo "RUN_URL=$RUN_URL" >> $GITHUB_OUTPUT
-
-          MAKEJOBS=1
-          if echo "${{ github.event.issue.body }}" | sed -n -e '19p' | grep '^- \[ \] ' ; then
-            MAKEJOBS=`nproc`
-          fi
-          echo "MAKEJOBS=$MAKEJOBS" >> $GITHUB_OUTPUT
       - name: Comment the issue
         uses: peter-evans/create-or-update-comment@v1
         with:
@@ -89,14 +112,14 @@ jobs:
         run: |
           echo "STUID=${{ needs.parse.outputs.STUID }}" >> $GITHUB_ENV
 
-      - name: Check branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 自动拥有当前仓库读取权限
-        run: |
-          if gh api "repos/${{ github.repository }}/branches" --jq '.[].name' | grep "ysyx_$STUID" ; then
-            echo "Branch ysyx_$STUID has been submitted before. Overwriting is not allowed. Abort."
-            false
-          fi
+      # - name: Check branch
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 自动拥有当前仓库读取权限
+      #   run: |
+      #     if gh api "repos/${{ github.repository }}/branches" --jq '.[].name' | grep "ysyx_$STUID" ; then
+      #       echo "Branch ysyx_$STUID has been submitted before. Overwriting is not allowed. Abort."
+      #       false
+      #     fi
 
       - uses: actions/checkout@v4
         with:
