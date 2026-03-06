@@ -392,18 +392,11 @@ jobs:
           name: verilog
           path: ${{ steps.vfilename.outputs.VFILE }}
 
-      - name: Package workspace for artifact
-        run: |
-          cd $YSYX_HOME/..
-          tar -czf ysyx-workspace.tar.gz ysyx-workbench
-          mkdir -p /tmp/artifact-upload
-          mv ysyx-workspace.tar.gz /tmp/artifact-upload/
-
       - name: Upload workspace artifact
         uses: actions/upload-artifact@v4
         with:
           name: workspace
-          path: /tmp/artifact-upload/
+          path: ${{ env.YSYX_HOME }}
           retention-days: 1
 
   hello:

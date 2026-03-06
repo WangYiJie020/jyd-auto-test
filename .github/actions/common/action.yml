@@ -16,15 +16,7 @@ runs:
       uses: actions/download-artifact@v4
       with:
         name: workspace
-        path: /tmp/artifact-download
-
-    - name: Extract workspace
-      shell: bash
-      run: |
-        TEMP_DIR=$(dirname ${{ inputs.YSYX_HOME }})
-        mkdir -p $TEMP_DIR
-        cd $TEMP_DIR
-        tar -xzf /tmp/artifact-download/ysyx-workspace.tar.gz
+        path: ${{ inputs.YSYX_HOME }}
 
     - name: Restore oss-cad-suite cache
       uses: actions/cache@v4
@@ -39,7 +31,7 @@ runs:
         MILL_VERSION_FILE="${{ inputs.YSYX_HOME }}/npc/.mill-version"
         if [[ -f "$MILL_VERSION_FILE" ]]; then
           MILL_VERSION=$(cat "$MILL_VERSION_FILE")
-          echo "Find .mill-version need $MILL_VERSION"
+          echo "Found .mill-version need $MILL_VERSION"
           curl -L "https://github.com/com-lihaoyi/mill/releases/download/$MILL_VERSION/$MILL_VERSION" -o ~/.local/bin/mill
           chmod +x ~/.local/bin/mill
           echo "$HOME/.local/bin" >> $GITHUB_PATH
@@ -64,12 +56,6 @@ runs:
 
         OSS_CAD_SUITE_BIN_PATH=`pwd`/oss-cad-suite/bin
         echo "PATH=$PATH:$OSS_CAD_SUITE_BIN_PATH" >> $GITHUB_ENV
-
-    - name: Cache APT packages
-      uses: actions/cache@v4
-      with:
-        path: /var/cache/apt/archives
-        key: ${{ runner.os }}-apt-packages-${{ hashFiles('**/action.yml') }}
 
     - name: Install RISC-V toolchain
       shell: bash
