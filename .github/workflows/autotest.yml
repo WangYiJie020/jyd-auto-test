@@ -385,14 +385,12 @@ jobs:
           path: |
             /tmp/ysyxSoC/build
           key: ${{ runner.os }}-ysyxsoc-verilog-${{ needs.parse.outputs.STUID }}-${{ hashFiles('**/ysyx-workbench/patch/ysyxSoC/*') }}
-          run: |
-            if [[ -d /tmp/ysyxSoC/build ]]; then
-              echo "Cache hit for ysyxSoC verilog."
-              mkdir -p $YSYX_HOME/ysyxSoC/build
-              cp -r /tmp/ysyxSoC/build/ $YSYX_HOME/ysyxSoC/build/
-            else
-              echo "Cache miss for ysyxSoC verilog."
-            fi
+
+      - name: Copy cached ysyxSoC verilog
+        if: steps.soc-verilog-cache.outputs.cache-hit == 'true'
+        run: |
+          mkdir -p $YSYX_HOME/ysyxSoC/build
+          cp -r /tmp/ysyxSoC/build/* $YSYX_HOME/ysyxSoC/build/
 
       - name: Clone and patch ysyxSoC
         if: steps.soc-verilog-cache.outputs.cache-hit != 'true'
