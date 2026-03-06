@@ -145,11 +145,17 @@ jobs:
         with:
           path: |
             ${{ steps.set-ysyx-home.outputs.YSYX_HOME }}
-            oss-cad-suite
             ~/.local
             ~/.cache/mill
           key: ${{ runner.os }}-dir-${{ steps.set-cache.outputs.cache-key }}
           restore-keys: ${{ runner.os }}-dir-
+
+      - name: Cache oss-cad-suite
+        uses: actions/cache@v4
+        id: oss-cad-suite-cache
+        with:
+          path: oss-cad-suite
+          key: ${{ runner.os }}-oss-cad-suite-20251124
 
       - name: Clone target repo
         if: steps.cache-dir.outputs.cache-hit != 'true'
@@ -320,8 +326,10 @@ jobs:
       - name: Setup tools
         if: steps.cache-dir.outputs.cache-hit != 'true'
         run: |
-          wget -q https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2025-11-24/oss-cad-suite-linux-x64-20251124.tgz
-          tar xf oss-cad-suite-linux-x64-20251124.tgz
+          if [[ "${{ steps.oss-cad-suite-cache.outputs.cache-hit }}" != "true" ]]; then
+            wget -q https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2025-11-24/oss-cad-suite-linux-x64-20251124.tgz
+            tar xf oss-cad-suite-linux-x64-20251124.tgz
+          fi
           OSS_CAD_SUITE_BIN_PATH=`pwd`/oss-cad-suite/bin
           echo "PATH=$PATH:$OSS_CAD_SUITE_BIN_PATH" >> $GITHUB_ENV
 

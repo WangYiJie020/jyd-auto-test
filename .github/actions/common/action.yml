@@ -17,12 +17,17 @@ runs:
       with:
         path: |
           ${{ inputs.YSYX_HOME }}
-          oss-cad-suite
           ~/.local
           ~/.cache/mill
         key: ${{ runner.os }}-dir-${{ inputs.cache-key }}
         restore-keys: |
           ${{ runner.os }}-dir-
+
+    - name: Restore oss-cad-suite cache
+      uses: actions/cache@v3
+      with:
+        path: oss-cad-suite
+        key: ${{ runner.os }}-oss-cad-suite-20251124
 
     - name: Set environment variables
       shell: bash
