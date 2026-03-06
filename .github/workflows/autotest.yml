@@ -395,10 +395,10 @@ jobs:
         if: steps.soc-verilog-cache.outputs.cache-hit == 'true'
         run: |
           mkdir -p $YSYX_HOME/ysyxSoC/build
-          cp -r /tmp/ysyxSoC/build $YSYX_HOME/ysyxSoC/build
+          cp /tmp/ysyxSoC/build/* $YSYX_HOME/ysyxSoC/build
           ls /tmp/ysyxSoC/build/
           ls $YSYX_HOME/ysyxSoC/build/
-          echo "verilog:" > $YSYX_HOME/ysyxSoC/Makefile # avoid "No rule to make target 'verilog'"
+          echo "verilog:" > $YSYX_HOME/ysyxSoC/Makefile # avoid remake
 
       - name: Generate verilog for ysyxSoC
         if: steps.soc-verilog-cache.outputs.cache-hit != 'true'
@@ -407,7 +407,7 @@ jobs:
           make -C $YSYX_HOME/ysyxSoC dev-init
           make -C $YSYX_HOME/ysyxSoC verilog
           mkdir -p /tmp/ysyxSoC/build
-          cp -r $YSYX_HOME/ysyxSoC/build /tmp/ysyxSoC/build
+          cp $YSYX_HOME/ysyxSoC/build/* /tmp/ysyxSoC/build
 
       - name: Upload verilog file
         uses: actions/upload-artifact@v4
