@@ -25,16 +25,26 @@ runs:
         mkdir -p $TEMP_DIR
         cd $TEMP_DIR
         tar -xzf /tmp/artifact-download/ysyx-workspace.tar.gz
-        
-        cd ~
-        tar -xzf /tmp/artifact-download/local.tar.gz
-        tar -xzf /tmp/artifact-download/cache-mill.tar.gz
 
     - name: Restore oss-cad-suite cache
       uses: actions/cache@v4
       with:
         path: oss-cad-suite
         key: ${{ runner.os }}-oss-cad-suite-20251124
+
+    - name: Install Mill
+      shell: bash
+      run: |
+        mkdir -p ~/.local/bin
+        MILL_VERSION_FILE="${{ inputs.YSYX_HOME }}/npc/.mill-version"
+        if [[ -f "$MILL_VERSION_FILE" ]]; then
+          MILL_VERSION=$(cat "$MILL_VERSION_FILE")
+          echo "Find .mill-version need $MILL_VERSION"
+          curl -L "https://github.com/com-lihaoyi/mill/releases/download/$MILL_VERSION/$MILL_VERSION" -o ~/.local/bin/mill
+          chmod +x ~/.local/bin/mill
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          mill --version
+        fi
 
     - name: Set environment variables
       shell: bash

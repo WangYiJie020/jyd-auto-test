@@ -398,12 +398,6 @@ jobs:
           tar -czf ysyx-workspace.tar.gz ysyx-workbench
           mkdir -p /tmp/artifact-upload
           mv ysyx-workspace.tar.gz /tmp/artifact-upload/
-          
-          cd ~
-          tar -czf local.tar.gz .local
-          tar -czf cache-mill.tar.gz .cache/mill
-          mv local.tar.gz /tmp/artifact-upload/
-          mv cache-mill.tar.gz /tmp/artifact-upload/
 
       - name: Upload workspace artifact
         uses: actions/upload-artifact@v4
