@@ -12,16 +12,23 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Restore cache
-      uses: actions/cache@v4
+    - name: Download workspace artifact
+      uses: actions/download-artifact@v4
       with:
-        path: |
-          ${{ inputs.YSYX_HOME }}
-          ~/.local
-          ~/.cache/mill
-        key: ${{ runner.os }}-dir-${{ inputs.cache-key }}
-        restore-keys: |
-          ${{ runner.os }}-dir-
+        name: workspace
+        path: /tmp/artifact-download
+
+    - name: Extract workspace
+      shell: bash
+      run: |
+        TEMP_DIR=$(dirname ${{ inputs.YSYX_HOME }})
+        mkdir -p $TEMP_DIR
+        cd $TEMP_DIR
+        tar -xzf /tmp/artifact-download/ysyx-workspace.tar.gz
+        
+        cd ~
+        tar -xzf /tmp/artifact-download/local.tar.gz
+        tar -xzf /tmp/artifact-download/cache-mill.tar.gz
 
     - name: Restore oss-cad-suite cache
       uses: actions/cache@v4
