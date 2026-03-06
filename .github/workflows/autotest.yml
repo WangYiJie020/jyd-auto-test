@@ -52,7 +52,7 @@ jobs:
       - name: Set outputs
         id: parse
         run: |
-          STUID="ysyx_25100261"
+          STUID="25100261"
           REPO="${{ steps.form-data.outputs.REPO }}"
           BRANCH="${{ steps.form-data.outputs.BRANCH }}"
           COMMENT="${{ steps.form-data.outputs.COMMENT }}"
