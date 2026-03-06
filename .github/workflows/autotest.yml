@@ -395,7 +395,9 @@ jobs:
         if: steps.soc-verilog-cache.outputs.cache-hit == 'true'
         run: |
           mkdir -p $YSYX_HOME/ysyxSoC/build
-          cp -r /tmp/ysyxSoC/build/* $YSYX_HOME/ysyxSoC/build/
+          cp -r /tmp/ysyxSoC/build $YSYX_HOME/ysyxSoC/build
+          ls /tmp/ysyxSoC/build/
+          ls $YSYX_HOME/ysyxSoC/build/
           echo "verilog:" > $YSYX_HOME/ysyxSoC/Makefile # avoid "No rule to make target 'verilog'"
 
       - name: Generate verilog for ysyxSoC
