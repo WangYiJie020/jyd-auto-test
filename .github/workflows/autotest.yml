@@ -140,7 +140,7 @@ jobs:
           echo "cache-key=$(date +%s)" >> $GITHUB_OUTPUT
 
       - name: Cache repo and tools
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: setup-cache
         with:
           path: |
