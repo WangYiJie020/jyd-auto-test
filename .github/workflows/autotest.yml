@@ -301,14 +301,10 @@ jobs:
           git clone --depth 1 -b ci https://github.com/NJU-ProjectN/am-kernels
           git clone --depth 1 https://github.com/NJU-ProjectN/rt-thread-am
           git clone --depth 1 -b no-gui https://github.com/NJU-ProjectN/nvboard
-          git clone --depth 1 -b ysyx6 https://github.com/OSCPU/ysyxSoC
 
           cd rt-thread-am
           git am $YSYX_HOME/patch/rt-thread-am/*
           cd $YSYX_HOME
-
-          cd ysyxSoC
-          git am $YSYX_HOME/patch/ysyxSoC/*
 
       - name: Clean up
         if: steps.cache-dir.outputs.cache-hit != 'true'
@@ -383,8 +379,24 @@ jobs:
             false
           fi
 
+      - name: Restore cached ysyxSoC verilog
+        id: soc-verilog-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.YSYX_HOME }}/ysyxSoC/build
+          key: ${{ runner.os }}-ysyxsoc-verilog-${{ needs.parse.outputs.STUID }}-${{ hashFiles('**/ysyx-workbench/patch/ysyxSoC/*') }}
+
+      - name: Clone and patch ysyxSoC
+        if: steps.soc-verilog-cache.outputs.cache-hit != 'true'
+        run: |
+          cd $YSYX_HOME
+          git clone --depth 1 -b ysyx6 https://github.com/OSCPU/ysyxSoC
+          cd ysyxSoC
+          git am $YSYX_HOME/patch/ysyxSoC/*
+
       - name: Generate verilog for ysyxSoC
-        if: steps.cache-dir.outputs.cache-hit != 'true'
+        if: steps.soc-verilog-cache.outputs.cache-hit != 'true'
         run: |
           sed -i -e 's+git@github.com:+https://github.com/+' $YSYX_HOME/ysyxSoC/.gitmodules
           make -C $YSYX_HOME/ysyxSoC dev-init
