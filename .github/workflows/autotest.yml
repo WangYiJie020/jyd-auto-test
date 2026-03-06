@@ -39,9 +39,9 @@ jobs:
           BODY="${{ github.event.issue.body }}"
           
           # 使用正则表达式从issue body中提取表单数据
-          REPO=$(echo "$BODY" | grep -A 1 "### 仓库URL" | tail -1 | xargs)
-          BRANCH=$(echo "$BODY" | grep -A 1 "### 分支名" | tail -1 | xargs)
-          COMMENT=$(echo "$BODY" | grep -A 1 "### 注释" | tail -1 | xargs)
+          REPO=$(echo "$BODY" | grep -A 2 "### 仓库URL" | tail -1 | xargs)
+          BRANCH=$(echo "$BODY" | grep -A 2 "### 分支名" | tail -1 | xargs)
+          COMMENT=$(echo "$BODY" | grep -A 2 "### 注释" | tail -1 | xargs)
           MAKE_CHECKED=$(echo "$BODY" | grep -A 2 "### make参数" | grep "^\- \[x\]" | wc -l)
           
           echo "REPO=$REPO" >> $GITHUB_OUTPUT
