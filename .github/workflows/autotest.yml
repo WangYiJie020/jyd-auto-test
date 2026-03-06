@@ -300,6 +300,11 @@ jobs:
           git clone --depth 1 -b ci https://github.com/NJU-ProjectN/am-kernels
           git clone --depth 1 https://github.com/NJU-ProjectN/rt-thread-am
           git clone --depth 1 -b no-gui https://github.com/NJU-ProjectN/nvboard
+          git clone --depth 1 -b ysyx6 https://github.com/OSCPU/ysyxSoC
+
+          cd ysyxSoC
+          git am $YSYX_HOME/patch/ysyxSoC/*
+          cd $YSYX_HOME
 
           cd rt-thread-am
           git am $YSYX_HOME/patch/rt-thread-am/*
@@ -392,14 +397,6 @@ jobs:
           mkdir -p $YSYX_HOME/ysyxSoC/build
           cp -r /tmp/ysyxSoC/build/* $YSYX_HOME/ysyxSoC/build/
           echo "verilog:" > $YSYX_HOME/ysyxSoC/Makefile # avoid "No rule to make target 'verilog'"
-
-      - name: Clone and patch ysyxSoC
-        if: steps.soc-verilog-cache.outputs.cache-hit != 'true'
-        run: |
-          cd $YSYX_HOME
-          git clone --depth 1 -b ysyx6 https://github.com/OSCPU/ysyxSoC
-          cd ysyxSoC
-          git am $YSYX_HOME/patch/ysyxSoC/*
 
       - name: Generate verilog for ysyxSoC
         if: steps.soc-verilog-cache.outputs.cache-hit != 'true'
