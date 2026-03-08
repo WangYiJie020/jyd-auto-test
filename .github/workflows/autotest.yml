@@ -91,15 +91,6 @@ jobs:
         run: |
           echo "STUID=${{ needs.parse.outputs.STUID }}" >> $GITHUB_ENV
 
-      - name: Check branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 自动拥有当前仓库读取权限
-        run: |
-          if gh api "repos/${{ github.repository }}/branches" --jq '.[].name' | grep "ysyx_$STUID" ; then
-            echo "Branch ysyx_$STUID has been submitted before. Overwriting is not allowed. Abort."
-            false
-          fi
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
