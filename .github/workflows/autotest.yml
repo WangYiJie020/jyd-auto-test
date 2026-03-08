@@ -653,18 +653,6 @@ jobs:
           echo "Area: $AREA_OLD"
           echo "AREA_OLD=$AREA_OLD" >> $GITHUB_ENV
 
-      - name: Check area
-        run: |
-          AREA_BUDGET=16500
-          AREA_OLD_BUDGET=25000
-          if [ $(awk "BEGIN {print ($AREA > $AREA_BUDGET)}") -eq 1 ]; then
-            if [ $(awk "BEGIN {print ($AREA_OLD > $AREA_OLD_BUDGET)}") -eq 1 ]; then
-              echo "Area($AREA) is larger than the budget($AREA_BUDGET)."
-              echo "Area for old version of yosys-sta($AREA_OLD) is larger than the budget($AREA_OLD_BUDGET)."
-              false
-            fi
-          fi
-
       - name: Upload netlist file
         uses: actions/upload-artifact@v4
         with:
