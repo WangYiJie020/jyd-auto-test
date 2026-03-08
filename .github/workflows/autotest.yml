@@ -7,6 +7,9 @@ on:
 permissions:
   issues: write
 
+env:
+  OSS_CAD_SUITE_RELEASE_TAG: 2025-11-24
+
 jobs:
   parse:
     runs-on: ubuntu-22.04
@@ -28,51 +31,28 @@ jobs:
           echo "📝 Body Content:"
           echo "${{ github.event.issue.body }}"  # 直接输出issue正文
       - name: Parse information
-        # id: parse
-        uses: peter-evans/find-comment@v3
-        with:
-          issue-number: ${{ github.event.issue.number }}
-      
-      - name: Extract form data
-        id: form-data
-        run: |
-          BODY="${{ github.event.issue.body }}"
-          
-          # 使用正则表达式从issue body中提取表单数据
-          REPO=$(echo "$BODY" | grep -A 2 "### 仓库URL" | tail -1 | xargs)
-          BRANCH=$(echo "$BODY" | grep -A 2 "### 分支名" | tail -1 | xargs)
-          COMMENT=$(echo "$BODY" | grep -A 2 "### 注释" | tail -1 | xargs)
-          MAKE_CHECKED=$(echo "$BODY" | grep -A 2 "### make参数" | grep "^\- \[x\]" | wc -l)
-          
-          echo "REPO=$REPO" >> $GITHUB_OUTPUT
-          echo "BRANCH=$BRANCH" >> $GITHUB_OUTPUT
-          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
-          echo "MAKE_CHECKED=$MAKE_CHECKED" >> $GITHUB_OUTPUT
-      
-      - name: Set outputs
         id: parse
         run: |
-          STUID="25100261"
-          REPO="${{ steps.form-data.outputs.REPO }}"
-          BRANCH="${{ steps.form-data.outputs.BRANCH }}"
-          COMMENT="${{ steps.form-data.outputs.COMMENT }}"
-          MAKEJOBS=1
-          
-          if [[ "${{ steps.form-data.outputs.MAKE_CHECKED }}" -gt 0 ]]; then
-            MAKEJOBS=`nproc`
-          fi
-          
+          STUID=$(echo "${{ github.event.issue.body }}" | sed -n -e '3p')
+          REPO=$(echo "${{ github.event.issue.body }}" | sed -n -e '7p')
+          BRANCH=$(echo "${{ github.event.issue.body }}" | sed -n -e '11p')
           echo "STUID=$STUID" >> $GITHUB_OUTPUT
           echo "REPO=$REPO" >> $GITHUB_OUTPUT
           echo "BRANCH=$BRANCH" >> $GITHUB_OUTPUT
-          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
-          echo "MAKEJOBS=$MAKEJOBS" >> $GITHUB_OUTPUT
 
           sudo timedatectl set-timezone Asia/Shanghai
           DATE=`date +"%F %T.%N"`
+          COMMENT=$(echo "${{ github.event.issue.body }}" | sed -n -e '15p')
           RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           echo "DATE=$DATE" >> $GITHUB_OUTPUT
+          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
           echo "RUN_URL=$RUN_URL" >> $GITHUB_OUTPUT
+
+          MAKEJOBS=1
+          if echo "${{ github.event.issue.body }}" | sed -n -e '19p' | grep '^- \[ \] ' ; then
+            MAKEJOBS=`nproc`
+          fi
+          echo "MAKEJOBS=$MAKEJOBS" >> $GITHUB_OUTPUT
       - name: Comment the issue
         uses: peter-evans/create-or-update-comment@v1
         with:
@@ -98,7 +78,6 @@ jobs:
     needs: parse
     runs-on: ubuntu-22.04
     outputs:
-      cache-key: ${{ steps.set-cache.outputs.cache-key }}
       YSYX_HOME: ${{ steps.set-ysyx-home.outputs.YSYX_HOME }}
       VFILE:     ${{ steps.vfilename.outputs.VFILE }}
       MAKEFLAGS: ${{ steps.set-env.outputs.MAKEFLAGS }}
@@ -112,14 +91,14 @@ jobs:
         run: |
           echo "STUID=${{ needs.parse.outputs.STUID }}" >> $GITHUB_ENV
 
-      # - name: Check branch
-      #   env:
-      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 自动拥有当前仓库读取权限
-      #   run: |
-      #     if gh api "repos/${{ github.repository }}/branches" --jq '.[].name' | grep "ysyx_$STUID" ; then
-      #       echo "Branch ysyx_$STUID has been submitted before. Overwriting is not allowed. Abort."
-      #       false
-      #     fi
+      - name: Check branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 自动拥有当前仓库读取权限
+        run: |
+          if gh api "repos/${{ github.repository }}/branches" --jq '.[].name' | grep "ysyx_$STUID" ; then
+            echo "Branch ysyx_$STUID has been submitted before. Overwriting is not allowed. Abort."
+            false
+          fi
 
       - uses: actions/checkout@v4
         with:
@@ -134,22 +113,8 @@ jobs:
           echo "YSYX_HOME=$YSYX_HOME" >> $GITHUB_ENV
           echo "YSYX_HOME=$YSYX_HOME" >> $GITHUB_OUTPUT
 
-      - name: Generate cache key
-        id: set-cache
-        run: |
-          echo "cache-key=$(date +%s)" >> $GITHUB_OUTPUT
-
-      - name: Cache oss-cad-suite
-        uses: actions/cache@v4
-        id: oss-cad-suite-cache
-        with:
-          path: oss-cad-suite
-          key: ${{ runner.os }}-oss-cad-suite-20251124
-
       - name: Clone target repo
         run: |
-          echo "Cloning target repository..."
-
           mkdir -p $YSYX_HOME
           cd $YSYX_HOME/..
           git clone --depth 1 -b ${{ needs.parse.outputs.BRANCH }} ${{ needs.parse.outputs.REPO }} ysyx-workbench
@@ -280,29 +245,27 @@ jobs:
             false
           fi
 
-      - name: Clone other repos
-        run: |
-          cd $YSYX_HOME
-          git clone --depth 1 -b ci https://github.com/NJU-ProjectN/am-kernels
-          git clone --depth 1 -b no-gui https://github.com/NJU-ProjectN/nvboard
-          git clone --depth 1 -b ysyx6 https://github.com/OSCPU/ysyxSoC
+      - name: Cache oss-cad-suite
+        id: oss-cad-suite-cache
+        uses: actions/cache@v4
+        with:
+          path: oss-cad-suite
+          key: ${{ runner.os }}-oss-cad-suite-${{ env.OSS_CAD_SUITE_RELEASE_TAG }}
 
-          cd ysyxSoC
-          git am $YSYX_HOME/patch/ysyxSoC/*
-          cd $YSYX_HOME
-
-      - name: Clean up
+      - name: Download oss-cad-suite
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        if: steps.oss-cad-suite-cache.outputs.cache-hit != 'true'
         run: |
-          make -C $NEMU_HOME clean
-          make -C $AM_HOME clean-all
-          make -C $NPC_HOME clean
+          echo "oss-cad-suite cache missed. Downloading and extracting release $TAG"
+          TAG=${{ steps.oss-cad-suite-tag.outputs.tag }}
+          ASSET_NAME=$(gh release view $TAG --repo YosysHQ/oss-cad-suite-build --json assets --jq ".assets[] | select(.name | contains(\"linux-x64\")) | .name")   
+          gh release download $TAG --repo YosysHQ/oss-cad-suite-build --pattern "$ASSET_NAME"
+          tar xf $ASSET_NAME
 
       - name: Setup tools
         run: |
-          if [[ "${{ steps.oss-cad-suite-cache.outputs.cache-hit }}" != "true" ]]; then
-            wget -q https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2025-11-24/oss-cad-suite-linux-x64-20251124.tgz
-            tar xf oss-cad-suite-linux-x64-20251124.tgz
-          fi
           OSS_CAD_SUITE_BIN_PATH=`pwd`/oss-cad-suite/bin
           echo "PATH=$PATH:$OSS_CAD_SUITE_BIN_PATH" >> $GITHUB_ENV
 
@@ -315,6 +278,67 @@ jobs:
           sh -c "curl -L https://github.com/com-lihaoyi/mill/releases/download/$MILL_VERSION/$MILL_VERSION > ~/.local/bin/mill && chmod +x ~/.local/bin/mill"
           mill --version
 
+      - name: Get ysyxSoC tag
+        id: soc-tag
+        run: |
+          SOC_REV=$(git ls-remote https://github.com/OSCPU/ysyxSoC.git ysyx6 | cut -f1)
+          echo "tag=$SOC_REV" >> $GITHUB_OUTPUT
+
+      - name: Cache ysyxSoC verilog
+        id: soc-verilog-cache
+        uses: actions/cache@v4
+        with:
+          # 不能直接缓存到 $YSYX_HOME，因为其路径包含了 Set YSYX_HOME step 自动生成的 tmp.xxx 目录，会导致缓存版本不一样无法命中
+          # https://github.com/actions/cache?tab=readme-ov-file#cache-version
+          path: ysyxSoC-verilog
+          key: ${{ runner.os }}-soc-verilog-${{ needs.parse.outputs.STUID }}-${{ steps.soc-tag.outputs.tag }}-${{ hashFiles('**/ysyx-workbench/patch/ysyxSoC/*') }}
+
+      - name: Cache inited ysyxSoC
+        id: soc-cache
+        if: steps.soc-verilog-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ysyxSoC-inited
+          key: ${{ runner.os }}-soc-inited-${{ steps.soc-tag.outputs.tag }}
+
+      - name: Init ysyxSoC
+        if: steps.soc-verilog-cache.outputs.cache-hit != 'true' && steps.soc-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "No inited ysyxSoC cache. Cloning and initializing ..."
+
+          git clone --depth 1 -b ysyx6 https://github.com/OSCPU/ysyxSoC ysyxSoC-inited
+          # 代替原先的 sed 修改 .gitmodules, 有学员的 patch 中修改了 .gitmodules
+          # 现在的流程中 soc 的初始化在 patch 之前，需要保证之后能正常 apply patch
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          cd ysyxSoC-inited
+          make dev-init
+          mill __.compile
+
+      - name: Patch ysyxSoC
+        run: |
+          if [[ "${{ steps.soc-verilog-cache.outputs.cache-hit }}" != "true" ]]; then
+            mkdir -p $YSYX_HOME/ysyxSoC/
+            cp -a ysyxSoC-inited/. $YSYX_HOME/ysyxSoC/
+          else
+            cd $YSYX_HOME
+            # 命中生成结果，不需要初始化的缓存，直接克隆不传递初始化的缓存
+            git clone --depth 1 -b ysyx6 https://github.com/OSCPU/ysyxSoC
+          fi
+          cd $YSYX_HOME/ysyxSoC
+          git am $YSYX_HOME/patch/ysyxSoC/*
+
+      - name: Clone other repos
+        run: |
+          cd $YSYX_HOME
+          git clone --depth 1 -b no-gui https://github.com/NJU-ProjectN/nvboard
+
+      - name: Clean up
+        run: |
+          make -C $NEMU_HOME clean
+          make -C $AM_HOME clean-all
+          make -C $NPC_HOME clean
+
+        # TODO: 考虑优化使用 Chisel 的学员生成 verilog 的流程
       - name: Generate verilog for NPC
         run: |
           touch $NPC_HOME/.timestamp
@@ -360,31 +384,21 @@ jobs:
             false
           fi
 
-      - name: Restore cached ysyxSoC verilog
-        id: soc-verilog-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            /tmp/ysyxSoC/build
-          key: ${{ runner.os }}-ysyxsoc-verilog-${{ needs.parse.outputs.STUID }}-${{ hashFiles('**/ysyx-workbench/patch/ysyxSoC/*') }}
-
-      - name: Copy cached ysyxSoC verilog
-        if: steps.soc-verilog-cache.outputs.cache-hit == 'true'
-        run: |
-          mkdir -p $YSYX_HOME/ysyxSoC/build
-          cp /tmp/ysyxSoC/build/* $YSYX_HOME/ysyxSoC/build
-          ls /tmp/ysyxSoC/build/
-          ls $YSYX_HOME/ysyxSoC/build/
-          echo "verilog:" > $YSYX_HOME/ysyxSoC/Makefile # avoid remake
-
       - name: Generate verilog for ysyxSoC
-        if: steps.soc-verilog-cache.outputs.cache-hit != 'true'
         run: |
-          sed -i -e 's+git@github.com:+https://github.com/+' $YSYX_HOME/ysyxSoC/.gitmodules
-          make -C $YSYX_HOME/ysyxSoC dev-init
-          make -C $YSYX_HOME/ysyxSoC verilog
-          mkdir -p /tmp/ysyxSoC/build
-          cp $YSYX_HOME/ysyxSoC/build/* /tmp/ysyxSoC/build
+          CACHED_SOC_VERILOG_DIR=`pwd`/ysyxSoC-verilog
+          if [[ "${{ steps.soc-verilog-cache.outputs.cache-hit }}" == "true" ]]; then
+            mkdir -p $YSYX_HOME/ysyxSoC/build
+            cp -a $CACHED_SOC_VERILOG_DIR/. $YSYX_HOME/ysyxSoC/build
+            if [[ ! -f $YSYX_HOME/ysyxSoC/build/ysyxSoCFull.v ]]; then
+              echo "Cached verilog file does not exist. Abort."
+              false
+            fi
+          else
+            make -C $YSYX_HOME/ysyxSoC verilog
+            mkdir -p $CACHED_SOC_VERILOG_DIR
+            cp -a $YSYX_HOME/ysyxSoC/build/. $CACHED_SOC_VERILOG_DIR
+          fi
 
       - name: Upload verilog file
         uses: actions/upload-artifact@v4
@@ -392,11 +406,17 @@ jobs:
           name: verilog
           path: ${{ steps.vfilename.outputs.VFILE }}
 
-      - name: Upload workspace artifact
+      - name: Pack workbench
+        run: |
+          cd $YSYX_HOME/..
+          tar -czf ysyx-workbench.tar.gz ysyx-workbench
+          mkdir -p /tmp/artifact-upload
+          mv ysyx-workbench.tar.gz /tmp/artifact-upload/
+      - name: Upload workbench
         uses: actions/upload-artifact@v4
         with:
-          name: workspace
-          path: ${{ env.YSYX_HOME }}
+          name: workbench
+          path: /tmp/artifact-upload/
           retention-days: 1
 
   hello:
@@ -411,7 +431,6 @@ jobs:
         uses: ./.github/actions/common
         with:
           YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
-          cache-key: ${{ needs.setup.outputs.cache-key }}
           MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
 
       - name: hello
@@ -431,7 +450,6 @@ jobs:
         uses: ./.github/actions/common
         with:
           YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
-          cache-key: ${{ needs.setup.outputs.cache-key }}
           MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
 
       - name: cpu-tests
@@ -451,7 +469,6 @@ jobs:
         uses: ./.github/actions/common
         with:
           YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
-          cache-key: ${{ needs.setup.outputs.cache-key }}
           MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
 
       - name: riscv-tests
@@ -472,7 +489,6 @@ jobs:
         uses: ./.github/actions/common
         with:
           YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
-          cache-key: ${{ needs.setup.outputs.cache-key }}
           MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
 
       - name: riscv-arch-test
@@ -493,7 +509,6 @@ jobs:
         uses: ./.github/actions/common
         with:
           YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
-          cache-key: ${{ needs.setup.outputs.cache-key }}
           MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
 
       - name: microbench
@@ -513,37 +528,15 @@ jobs:
         uses: ./.github/actions/common
         with:
           YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
-          cache-key: ${{ needs.setup.outputs.cache-key }}
           MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
 
       - name: Install dependency
         run: sudo apt install -y scons
 
-      - name: rt-thread init
-        run: |
-          cd $YSYX_HOME
-          git config --global user.email "ci@ysyx.org"
-          git config --global user.name "ysyx-ci"
-          git clone --depth 1 https://github.com/NJU-ProjectN/rt-thread-am
-          cd rt-thread-am
-          git am $YSYX_HOME/patch/rt-thread-am/*
-          cd $YSYX_HOME
-
-          cd $YSYX_HOME/rt-thread-am/bsp/abstract-machine
-          make ARCH=riscv32e-ysyxsoc init
-          make ARCH=riscv32e-ysyxsoc
-          ls $YSYX_HOME/rt-thread-am/bsp/abstract-machine/build/
-
-      # - name: Upload build result
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #      name: rt-thread-build
-      #      path: ${{ env.YSYX_HOME }}/rt-thread-am/bsp/abstract-machine/build/
-      #      retention-days: 5
-
       - name: rt-thread
         run: |
           cd $YSYX_HOME/rt-thread-am/bsp/abstract-machine
+          make ARCH=riscv32e-ysyxsoc init
           KEY=$(head -c 5 /dev/urandom | base32)
           python $MONITOR_PY --good=$KEY make ARCH=riscv32e-ysyxsoc run
 
@@ -559,18 +552,11 @@ jobs:
         uses: ./.github/actions/common
         with:
           YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
-          cache-key: ${{ needs.setup.outputs.cache-key }}
           MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
 
       - name: compile microbench
         run: |
           make ARCH=riscv32e-npc -C $YSYX_HOME/am-kernels/benchmarks/microbench mainargs=the_insert-arg_rule_in_Makefile_will_insert_mainargs_here
-
-      - name: Upload iverilog-microbench build result
-        uses: actions/upload-artifact@v4
-        with:
-           name: iverilog-microbench-build
-           path: ${{ env.YSYX_HOME }}/am-kernels/benchmarks/microbench/build/
 
       - name: run microbench with iverilog
         run: |
@@ -578,15 +564,7 @@ jobs:
           KEY=$(head -c 5 /dev/urandom | base32)
           IMG=$YSYX_HOME/am-kernels/benchmarks/microbench/build/microbench-riscv32e-npc.bin
           python $AM_HOME/tools/insert-arg.py $IMG 64 the_insert-arg_rule_in_Makefile_will_insert_mainargs_here $KEY
-          echo "directly running sim-iverilog"
-          make -C $NPC_HOME sim-iverilog IMG=$IMG
-          echo "running sim-iverilog with monitor"
           python $MONITOR_PY --good=$KEY make -C $NPC_HOME sim-iverilog IMG=$IMG
-      - name: Upload sim-iverilog gened hex file
-        uses: actions/upload-artifact@v4
-        with:
-           name: iverilog-microbench-hex
-           path: ${{ env.NPC_HOME }}/build/npcmem_init.hex
 
   yosys-sta:
     needs: [parse, setup]
@@ -600,7 +578,6 @@ jobs:
         uses: ./.github/actions/common
         with:
           YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
-          cache-key: ${{ needs.setup.outputs.cache-key }}
           MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
           install-toolchain: 'false'
 
@@ -645,14 +622,48 @@ jobs:
             false
           fi
 
-      - name: Upload synthesis reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: yosys-sta-reports
-          path: |
-            yosys-sta/result/ysyx_${{ needs.parse.outputs.STUID }}-500MHz/*.log
-            yosys-sta/result/ysyx_${{ needs.parse.outputs.STUID }}-500MHz/*.rpt
-            yosys-sta/result/ysyx_${{ needs.parse.outputs.STUID }}-500MHz/*.txt
+      - name: Parse area
+        run: |
+          YOSYS_LOG=yosys-sta/result/ysyx_$STUID-500MHz/yosys-fixed.log
+          AREA=`grep -o "Chip area for module .*: .*" $YOSYS_LOG | sed -e 's/.*: \([0-9]*\.[0-9]*\)$/\1/'`
+          if [[ $AREA == "" ]] ; then
+            echo "Can not obtain area from yosys-sta. Abort."
+            false
+          fi
+          echo "Area: $AREA"
+          echo "AREA=$AREA" >> $GITHUB_ENV
+
+      - name: Run STA with older version
+        run: |
+          cd yosys-sta
+          git config --global user.email "ci@ysyx.org"
+          git config --global user.name "ysyx-ci"
+          git revert --no-edit 97fa7fcb80de4966c6f390af8df1b37d6d4c42c8
+          make clean
+          make sta DESIGN=ysyx_$STUID CLK_FREQ_MHZ=500 CLK_PORT_NAME=clock RTL_FILES=$VFILE
+
+      - name: Parse area with older version
+        run: |
+          YOSYS_LOG=yosys-sta/result/ysyx_$STUID-500MHz/yosys-fixed.log
+          AREA_OLD=`grep -o "Chip area for module .*: .*" $YOSYS_LOG | sed -e 's/.*: \([0-9]*\.[0-9]*\)$/\1/'`
+          if [[ $AREA_OLD == "" ]] ; then
+            echo "Can not obtain area from yosys-sta. Abort."
+            false
+          fi
+          echo "Area: $AREA_OLD"
+          echo "AREA_OLD=$AREA_OLD" >> $GITHUB_ENV
+
+      - name: Check area
+        run: |
+          AREA_BUDGET=16500
+          AREA_OLD_BUDGET=25000
+          if [ $(awk "BEGIN {print ($AREA > $AREA_BUDGET)}") -eq 1 ]; then
+            if [ $(awk "BEGIN {print ($AREA_OLD > $AREA_OLD_BUDGET)}") -eq 1 ]; then
+              echo "Area($AREA) is larger than the budget($AREA_BUDGET)."
+              echo "Area for old version of yosys-sta($AREA_OLD) is larger than the budget($AREA_OLD_BUDGET)."
+              false
+            fi
+          fi
 
       - name: Upload netlist file
         uses: actions/upload-artifact@v4
@@ -672,7 +683,6 @@ jobs:
         uses: ./.github/actions/common
         with:
           YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
-          cache-key: ${{ needs.setup.outputs.cache-key }}
           MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
 
       - name: Download verilog file
@@ -701,9 +711,88 @@ jobs:
           python $AM_HOME/tools/insert-arg.py $IMG 64 the_insert-arg_rule_in_Makefile_will_insert_mainargs_here $KEY
           python $MONITOR_PY --good=$KEY make -C $NPC_HOME sim-iverilog-netlist IMG=$IMG NETLIST=$NETLIST CELLS=$CELLS
 
+  more-tests:
+    needs: [setup, hello, cpu-tests, riscv-tests, riscv-arch-test, microbench, rt-thread, iverilog-microbench, yosys-sta, iverilog-netlist-microbench]
+    runs-on: self-hosted
+    steps:
+      - name: Download verilog file
+        uses: actions/download-artifact@v4
+        with:
+          name: verilog
+      - name: More tests
+        run: |
+          VFILE=`basename "${{ needs.setup.outputs.VFILE }}"`
+          bash ../../../more-tests.sh `realpath $VFILE`
+
+  push-code:
+    needs: [parse, setup, more-tests]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write  # 关键：授予写入权限
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Common operations
+        uses: ./.github/actions/common
+        with:
+          YSYX_HOME: ${{ needs.setup.outputs.YSYX_HOME }}
+          MAKEFLAGS: ${{ needs.setup.outputs.MAKEFLAGS }}
+          install-toolchain: 'false'
+
+      - name: Set Git user and email
+        run: |
+          git config --global user.email "ci@ysyx.org"
+          git config --global user.name "ysyx-ci"
+
+      - name: Fetch target branch
+        run: |
+          pwd
+          git remote add local file://$YSYX_HOME
+          git fetch local tmp-ci:tmp-ci
+          git checkout tmp-ci
+          git checkout master .github
+          git reset HEAD .github
+
+      - name: Add info
+        run: |
+          echo "" >> README.md
+          echo "STUID - ysyx_${{ needs.parse.outputs.STUID }}" >> README.md
+          echo "" >> README.md
+          echo "Original repo - ${{ needs.parse.outputs.REPO }}" >> README.md
+          echo "" >> README.md
+          echo "Original branch - ${{ needs.parse.outputs.BRANCH }}" >> README.md
+          git add -f README.md
+          git commit -m "add original info"
+
+      - name: Add exam script
+        run: |
+          mkdir ysyx-ci
+          cd ysyx-ci
+          echo "empty" > init-exam.sh
+          git add -f init-exam.sh
+          git commit -m "add init-exam.sh"
+
+      - name: Add result git tracer
+        run: |
+          cd $YSYX_HOME
+          git log -u tracer-ysyx > tracer.log
+          tar cj tracer.log > tracer.tar.bz2
+          rm tracer.log
+          cd -
+          mv $YSYX_HOME/tracer.tar.bz2 ysyx-ci/
+          git add -f ysyx-ci/tracer.tar.bz2
+          git commit -m "add tracer.tar.bz2"
+
+      - name: Push code
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push origin HEAD:ysyx_${{ needs.parse.outputs.STUID }}
 
   finish:
-    needs: [parse, setup, hello, cpu-tests, riscv-tests, riscv-arch-test, microbench, rt-thread, iverilog-microbench, yosys-sta, iverilog-netlist-microbench]
+    needs: [parse, push-code]
     runs-on: ubuntu-22.04
     steps:
       - name: Comment the issue
@@ -715,14 +804,14 @@ jobs:
             Finish
           edit-mode: append
 
-      # - name: Close the issue
-      #   uses: peter-evans/close-issue@v2
-      #   with:
-      #     issue-number: ${{ github.event.issue.number }}
+      - name: Close the issue
+        uses: peter-evans/close-issue@v2
+        with:
+          issue-number: ${{ github.event.issue.number }}
 
   error-handler:
     runs-on: ubuntu-22.04
-    needs: [parse, setup, hello, cpu-tests, riscv-tests, riscv-arch-test, microbench, rt-thread, iverilog-microbench, yosys-sta, iverilog-netlist-microbench]
+    needs: [parse, setup, hello, cpu-tests, riscv-tests, riscv-arch-test, microbench, rt-thread, iverilog-microbench, yosys-sta, iverilog-netlist-microbench, more-tests, push-code]
     if: ${{ failure() }}
     steps:
       - name: Comment the issue
