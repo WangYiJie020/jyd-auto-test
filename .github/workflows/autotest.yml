@@ -30,29 +30,49 @@ jobs:
           echo ""
           echo "📝 Body Content:"
           echo "${{ github.event.issue.body }}"  # 直接输出issue正文
-      - name: Parse information
-        id: parse
+      
+      - name: Extract form data
+        id: form-data
         run: |
-          STUID=$(echo "${{ github.event.issue.body }}" | sed -n -e '3p')
-          REPO=$(echo "${{ github.event.issue.body }}" | sed -n -e '7p')
-          BRANCH=$(echo "${{ github.event.issue.body }}" | sed -n -e '11p')
+          BODY="${{ github.event.issue.body }}"
+          
+          # 使用正则表达式从issue body中提取表单数据
+          REPO=$(echo "$BODY" | grep -A 2 "### 仓库URL" | tail -1 | xargs)
+          BRANCH=$(echo "$BODY" | grep -A 2 "### 分支名" | tail -1 | xargs)
+          COMMENT=$(echo "$BODY" | grep -A 2 "### 注释" | tail -1 | xargs)
+          MAKE_CHECKED=$(echo "$BODY" | grep -A 2 "### make参数" | grep "^\- \[x\]" | wc -l)
+          
+          echo "REPO=$REPO" >> $GITHUB_OUTPUT
+          echo "BRANCH=$BRANCH" >> $GITHUB_OUTPUT
+          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
+          echo "MAKE_CHECKED=$MAKE_CHECKED" >> $GITHUB_OUTPUT
+      
+      - name: Set outputs
+        id: parse
+        with:
+          issue-number: ${{ github.event.issue.number }}
+        run: |
+          STUID="25100261"
+          REPO="${{ steps.form-data.outputs.REPO }}"
+          BRANCH="${{ steps.form-data.outputs.BRANCH }}"
+          COMMENT="${{ steps.form-data.outputs.COMMENT }}"
+          MAKEJOBS=1
+          
+          if [[ "${{ steps.form-data.outputs.MAKE_CHECKED }}" -gt 0 ]]; then
+            MAKEJOBS=`nproc`
+          fi
+          
           echo "STUID=$STUID" >> $GITHUB_OUTPUT
           echo "REPO=$REPO" >> $GITHUB_OUTPUT
           echo "BRANCH=$BRANCH" >> $GITHUB_OUTPUT
+          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
+          echo "MAKEJOBS=$MAKEJOBS" >> $GITHUB_OUTPUT
 
           sudo timedatectl set-timezone Asia/Shanghai
           DATE=`date +"%F %T.%N"`
-          COMMENT=$(echo "${{ github.event.issue.body }}" | sed -n -e '15p')
           RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           echo "DATE=$DATE" >> $GITHUB_OUTPUT
-          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
           echo "RUN_URL=$RUN_URL" >> $GITHUB_OUTPUT
-
-          MAKEJOBS=1
-          if echo "${{ github.event.issue.body }}" | sed -n -e '19p' | grep '^- \[ \] ' ; then
-            MAKEJOBS=`nproc`
-          fi
-          echo "MAKEJOBS=$MAKEJOBS" >> $GITHUB_OUTPUT
       - name: Comment the issue
         uses: peter-evans/create-or-update-comment@v1
         with:

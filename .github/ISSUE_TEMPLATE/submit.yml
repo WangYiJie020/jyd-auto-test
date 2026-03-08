@@ -2,13 +2,6 @@ name: B阶段考核提交表单
 description: 申请B阶段考核
 body:
   - type: input
-    id: stuid
-    attributes:
-      label: 一生一芯学号
-      description: 填写8位的一生一芯学号
-    validations:
-      required: true
-  - type: input
     id: repo-url
     attributes:
       label: 仓库URL
