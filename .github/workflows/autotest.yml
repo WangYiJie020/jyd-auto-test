@@ -1,8 +1,31 @@
 name: Auto-test Workflow
 
 on:
-  issues:
-    types: [opened, edited]
+  push:
+    branches: [main]
+    paths:
+      - 'npc/**'
+      - 'patch/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '测试的分支'
+        required: true
+        default: 'main'
+      comment:
+        description: '注释 (可为空)'
+        required: false
+        default: ''
+
+run-name: >-
+  ${{
+    github.event_name == 'push' && github.event.head_commit.message ||
+    github.event_name == 'pull_request' && github.event.pull_request.title ||
+    github.event.inputs.comment != '' && github.event.inputs.comment ||
+    'Manual trigger'
+  }}
 
 permissions:
   issues: write
@@ -11,93 +34,10 @@ env:
   OSS_CAD_SUITE_RELEASE_TAG: 2025-11-24
 
 jobs:
-  parse:
-    runs-on: ubuntu-22.04
-    outputs:
-      STUID:  ${{ steps.parse.outputs.STUID }}
-      REPO:   ${{ steps.parse.outputs.REPO }}
-      BRANCH: ${{ steps.parse.outputs.BRANCH }}
-      MAKEJOBS: ${{ steps.parse.outputs.MAKEJOBS }}
-      COMMENT_ID: ${{ steps.comment-id.outputs.COMMENT_ID }}
-    steps:
-      - name: Print issue details
-        run: |
-          echo "🆕 New Issue Created"
-          echo "---------------------"
-          echo "📌 Title: ${{ github.event.issue.title }}"
-          echo "👤 Author: ${{ github.event.issue.user.login }}"
-          echo "🔗 URL: ${{ github.event.issue.html_url }}"
-          echo ""
-          echo "📝 Body Content:"
-          echo "${{ github.event.issue.body }}"  # 直接输出issue正文
-      
-      - name: Extract form data
-        id: form-data
-        run: |
-          BODY="${{ github.event.issue.body }}"
-          
-          # 使用正则表达式从issue body中提取表单数据
-          REPO=$(echo "$BODY" | grep -A 2 "### 仓库URL" | tail -1 | xargs)
-          BRANCH=$(echo "$BODY" | grep -A 2 "### 分支名" | tail -1 | xargs)
-          COMMENT=$(echo "$BODY" | grep -A 2 "### 注释" | tail -1 | xargs)
-          MAKE_CHECKED=$(echo "$BODY" | grep -A 2 "### make参数" | grep "^\- \[x\]" | wc -l)
-          
-          echo "REPO=$REPO" >> $GITHUB_OUTPUT
-          echo "BRANCH=$BRANCH" >> $GITHUB_OUTPUT
-          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
-          echo "MAKE_CHECKED=$MAKE_CHECKED" >> $GITHUB_OUTPUT
-      
-      - name: Set outputs
-        id: parse
-        with:
-          issue-number: ${{ github.event.issue.number }}
-        run: |
-          STUID="25100261"
-          REPO="${{ steps.form-data.outputs.REPO }}"
-          BRANCH="${{ steps.form-data.outputs.BRANCH }}"
-          COMMENT="${{ steps.form-data.outputs.COMMENT }}"
-          MAKEJOBS=1
-          
-          if [[ "${{ steps.form-data.outputs.MAKE_CHECKED }}" -gt 0 ]]; then
-            MAKEJOBS=`nproc`
-          fi
-          
-          echo "STUID=$STUID" >> $GITHUB_OUTPUT
-          echo "REPO=$REPO" >> $GITHUB_OUTPUT
-          echo "BRANCH=$BRANCH" >> $GITHUB_OUTPUT
-          echo "COMMENT=$COMMENT" >> $GITHUB_OUTPUT
-          echo "MAKEJOBS=$MAKEJOBS" >> $GITHUB_OUTPUT
-
-          sudo timedatectl set-timezone Asia/Shanghai
-          DATE=`date +"%F %T.%N"`
-          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          echo "DATE=$DATE" >> $GITHUB_OUTPUT
-          echo "RUN_URL=$RUN_URL" >> $GITHUB_OUTPUT
-      - name: Comment the issue
-        uses: peter-evans/create-or-update-comment@v1
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          body: |
-            Workflow starts at ${{ steps.parse.outputs.DATE }}
-            Comment - ${{ steps.parse.outputs.COMMENT }}
-            Workflow URL - ${{ steps.parse.outputs.RUN_URL }}
-      - name: Find Comment
-        uses: peter-evans/find-comment@v3
-        id: fc
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          comment-author: 'github-actions[bot]'
-          body-includes: Workflow starts at ${{ steps.parse.outputs.DATE }}
-      - name: Export comment ID
-        id: comment-id
-        run: |
-          COMMENT_ID=${{ steps.fc.outputs.comment-id }}
-          echo "COMMENT_ID=$COMMENT_ID" >> $GITHUB_OUTPUT
-
   setup:
-    needs: parse
     runs-on: ubuntu-22.04
     outputs:
+      STUID:     ${{ steps.check-stuid.outputs.STUID }}
       YSYX_HOME: ${{ steps.set-ysyx-home.outputs.YSYX_HOME }}
       VFILE:     ${{ steps.vfilename.outputs.VFILE }}
       MAKEFLAGS: ${{ steps.set-env.outputs.MAKEFLAGS }}
@@ -107,42 +47,20 @@ jobs:
           git config --global user.email "ci@ysyx.org"
           git config --global user.name "ysyx-ci"
 
-      - name: Set student ID as environment variable
-        run: |
-          echo "STUID=${{ needs.parse.outputs.STUID }}" >> $GITHUB_ENV
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Set YSYX_HOME
         id: set-ysyx-home
         run: |
-          TEMP_DIR=$(mktemp -d -p .)
-          cd $TEMP_DIR
-          YSYX_HOME=$(pwd)/ysyx-workbench
+          YSYX_HOME=$(pwd)
           echo "YSYX_HOME=$YSYX_HOME" >> $GITHUB_ENV
           echo "YSYX_HOME=$YSYX_HOME" >> $GITHUB_OUTPUT
 
-      - name: Clone target repo
-        run: |
-          mkdir -p $YSYX_HOME
-          cd $YSYX_HOME/..
-          git clone --depth 1 -b ${{ needs.parse.outputs.BRANCH }} ${{ needs.parse.outputs.REPO }} ysyx-workbench
-
-      - name: Create orphan branch
-        run: |
-          cd $YSYX_HOME
-          git checkout --orphan tmp-ci
-          git commit -m "orphan branch created by CI"
-          cd ..
-          git clone -b tmp-ci file://$YSYX_HOME ysyx-workbench-ci
-          rm -rf ysyx-workbench
-          mv ysyx-workbench-ci ysyx-workbench
-          cd $YSYX_HOME
-          git remote set-url origin ${{ needs.parse.outputs.REPO }}
-
       - name: Check student ID
+        id: check-stuid
         run: |
           cd $YSYX_HOME
           stuid=$(grep -E -o "STUID = ysyx_[0-9]{8}" Makefile)
@@ -150,11 +68,9 @@ jobs:
             echo "Missing STUID in Makefile (format: STUID = ysyx_XXXXXXXX). Abort."
             false
           fi
-          stuid=$(echo $stuid | grep -E -o "[0-9]{8}$")
-          if [[ $stuid != $STUID ]]; then
-            echo "STUID in Makefile($stuid) is different from the one filled in the form($STUID). Abort."
-            false
-          fi
+          STUID=$(echo $stuid | grep -E -o "[0-9]{8}$")
+          echo "STUID=$STUID" >> $GITHUB_ENV
+          echo "STUID=$STUID" >> $GITHUB_OUTPUT
 
       - name: Parse git log generated by git tracer
         id: tracer
@@ -187,20 +103,6 @@ jobs:
 
           rm log.txt
 
-      - name: Comment the issue
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          comment-id: ${{ needs.parse.outputs.COMMENT_ID }}
-          body: |
-            +++++ tracer-ysyx +++++
-            compile NEMU - ${{ steps.tracer.outputs.NR_COMPILE_NEMU }}
-            run NEMU - ${{ steps.tracer.outputs.NR_RUN_NEMU }}
-            gdb NEMU - ${{ steps.tracer.outputs.NR_GDB_NEMU }}
-            sim RTL - ${{ steps.tracer.outputs.NR_SIM_RTL }}
-            +++++++++++++++++++++++
-          edit-mode: append
-
       - name: Set environment variables
         id: set-env
         run: |
@@ -217,7 +119,7 @@ jobs:
           echo "NPC_HOME=$NPC_HOME" >> $GITHUB_ENV
           echo "NVBOARD_HOME=$NVBOARD_HOME" >> $GITHUB_ENV
 
-          MAKEFLAGS="-j${{ needs.parse.outputs.MAKEJOBS }}"
+          MAKEFLAGS="-j`nproc`"
           echo "MAKEFLAGS=$MAKEFLAGS" >> $GITHUB_ENV
           echo "MAKEFLAGS=$MAKEFLAGS" >> $GITHUB_OUTPUT
 
@@ -261,9 +163,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         if: steps.oss-cad-suite-cache.outputs.cache-hit != 'true'
         run: |
+          TAG=${{ env.OSS_CAD_SUITE_RELEASE_TAG }}
           echo "oss-cad-suite cache missed. Downloading and extracting release $TAG"
-          TAG=${{ steps.oss-cad-suite-tag.outputs.tag }}
-          ASSET_NAME=$(gh release view $TAG --repo YosysHQ/oss-cad-suite-build --json assets --jq ".assets[] | select(.name | contains(\"linux-x64\")) | .name")   
+          ASSET_NAME=$(gh release view $TAG --repo YosysHQ/oss-cad-suite-build --json assets --jq ".assets[] | select(.name | contains(\"linux-x64\")) | .name")
           gh release download $TAG --repo YosysHQ/oss-cad-suite-build --pattern "$ASSET_NAME"
           tar xf $ASSET_NAME
 
@@ -291,10 +193,8 @@ jobs:
         id: soc-verilog-cache
         uses: actions/cache@v4
         with:
-          # 不能直接缓存到 $YSYX_HOME，因为其路径包含了 Set YSYX_HOME step 自动生成的 tmp.xxx 目录，会导致缓存版本不一样无法命中
-          # https://github.com/actions/cache?tab=readme-ov-file#cache-version
           path: ysyxSoC-verilog
-          key: ${{ runner.os }}-soc-verilog-${{ needs.parse.outputs.STUID }}-${{ steps.soc-tag.outputs.tag }}-${{ hashFiles('**/ysyx-workbench/patch/ysyxSoC/*') }}
+          key: ${{ runner.os }}-soc-verilog-${{ steps.check-stuid.outputs.STUID }}-${{ steps.soc-tag.outputs.tag }}-${{ hashFiles('patch/ysyxSoC/*') }}
 
       - name: Cache inited ysyxSoC
         id: soc-cache
@@ -411,10 +311,16 @@ jobs:
 
       - name: Pack workbench
         run: |
-          cd $YSYX_HOME/..
-          tar -czf ysyx-workbench.tar.gz ysyx-workbench
+          PARENT=$(dirname $YSYX_HOME)
+          BASENAME=$(basename $YSYX_HOME)
           mkdir -p /tmp/artifact-upload
-          mv ysyx-workbench.tar.gz /tmp/artifact-upload/
+          cd $PARENT
+          tar -czf /tmp/artifact-upload/ysyx-workbench.tar.gz \
+            --exclude="$BASENAME/.git" \
+            --exclude="$BASENAME/oss-cad-suite" \
+            --exclude="$BASENAME/ysyxSoC-inited" \
+            --exclude="$BASENAME/ysyxSoC-verilog" \
+            $BASENAME
       - name: Upload workbench
         uses: actions/upload-artifact@v4
         with:
@@ -429,6 +335,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Common operations
         uses: ./.github/actions/common
@@ -448,6 +355,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Common operations
         uses: ./.github/actions/common
@@ -467,6 +375,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Common operations
         uses: ./.github/actions/common
@@ -487,6 +396,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Common operations
         uses: ./.github/actions/common
@@ -507,6 +417,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Common operations
         uses: ./.github/actions/common
@@ -526,6 +437,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Common operations
         uses: ./.github/actions/common
@@ -550,6 +462,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Common operations
         uses: ./.github/actions/common
@@ -570,12 +483,13 @@ jobs:
           python $MONITOR_PY --good=$KEY make -C $NPC_HOME sim-iverilog IMG=$IMG
 
   yosys-sta:
-    needs: [parse, setup]
+    needs: setup
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Common operations
         uses: ./.github/actions/common
@@ -601,7 +515,7 @@ jobs:
 
       - name: Set environment variables
         run: |
-          echo "STUID=${{ needs.parse.outputs.STUID }}" >> $GITHUB_ENV
+          echo "STUID=${{ needs.setup.outputs.STUID }}" >> $GITHUB_ENV
           echo "VFILE=${{ needs.setup.outputs.VFILE }}" >> $GITHUB_ENV
 
       - name: Run STA
@@ -631,21 +545,22 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sta-result
-          path: yosys-sta/result/ysyx_${{ needs.parse.outputs.STUID }}-500MHz
+          path: yosys-sta/result/ysyx_${{ needs.setup.outputs.STUID }}-500MHz
 
       - name: Upload netlist file
         uses: actions/upload-artifact@v4
         with:
           name: netlist
-          path: yosys-sta/result/ysyx_${{ needs.parse.outputs.STUID }}-500MHz/ysyx_${{ needs.parse.outputs.STUID }}.netlist.fixed.v
+          path: yosys-sta/result/ysyx_${{ needs.setup.outputs.STUID }}-500MHz/ysyx_${{ needs.setup.outputs.STUID }}.netlist.fixed.v
 
   iverilog-netlist-microbench:
-    needs: [parse, setup, yosys-sta]
+    needs: [setup, yosys-sta]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || '' }}
 
       - name: Common operations
         uses: ./.github/actions/common
@@ -672,41 +587,9 @@ jobs:
       - name: run microbench with iverilog netlist
         run: |
           make -C $NPC_HOME clean
-          NETLIST=`pwd`/ysyx_${{ needs.parse.outputs.STUID }}.netlist.fixed.v
+          NETLIST=`pwd`/ysyx_${{ needs.setup.outputs.STUID }}.netlist.fixed.v
           CELLS=`pwd`/yosys-sta/pdk/nangate45/sim/cells.v
           KEY=$(head -c 5 /dev/urandom | base32)
           IMG=$YSYX_HOME/am-kernels/benchmarks/microbench/build/microbench-riscv32e-npc.bin
           python $AM_HOME/tools/insert-arg.py $IMG 64 the_insert-arg_rule_in_Makefile_will_insert_mainargs_here $KEY
           python $MONITOR_PY --good=$KEY make -C $NPC_HOME sim-iverilog-netlist IMG=$IMG NETLIST=$NETLIST CELLS=$CELLS
-
-  finish:
-    needs: [parse, push-code]
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Comment the issue
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          comment-id: ${{ needs.parse.outputs.COMMENT_ID }}
-          body: |
-            Finish
-          edit-mode: append
-
-      - name: Close the issue
-        uses: peter-evans/close-issue@v2
-        with:
-          issue-number: ${{ github.event.issue.number }}
-
-  error-handler:
-    runs-on: ubuntu-22.04
-    needs: [parse, setup, hello, cpu-tests, riscv-tests, riscv-arch-test, microbench, rt-thread, iverilog-microbench, yosys-sta, iverilog-netlist-microbench, more-tests, push-code]
-    if: ${{ failure() }}
-    steps:
-      - name: Comment the issue
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.issue.number }}
-          comment-id: ${{ needs.parse.outputs.COMMENT_ID }}
-          body: |
-            End with errors
-          edit-mode: append

@@ -107,5 +107,5 @@ if state == "empty":
     print(sys.argv[0] + ": Keyword not detected")
     exit(1)
 if state == "bad":
-    print("sys.argv[0]" + ": Detect bad trap")
+    print(sys.argv[0] + ": Detect bad trap")
     exit(1)

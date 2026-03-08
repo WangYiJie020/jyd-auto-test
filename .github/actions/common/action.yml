@@ -18,9 +18,9 @@ runs:
     - name: Extract workbench
       shell: bash
       run: |
-        TEMP_DIR=$(dirname ${{ inputs.YSYX_HOME }})
-        mkdir -p $TEMP_DIR
-        cd $TEMP_DIR
+        PARENT=$(dirname ${{ inputs.YSYX_HOME }})
+        mkdir -p $PARENT
+        cd $PARENT
         tar -xzf /tmp/artifact-download/ysyx-workbench.tar.gz
 
     - name: Cache oss-cad-suite cache
@@ -46,7 +46,7 @@ runs:
     - name: Set environment variables
       shell: bash
       run: |
-        MONITOR_PY="`pwd`/monitor.py"
+        MONITOR_PY="$GITHUB_WORKSPACE/.github/monitor.py"
         echo "MONITOR_PY=$MONITOR_PY" >> $GITHUB_ENV
 
         YSYX_HOME=${{ inputs.YSYX_HOME }}
